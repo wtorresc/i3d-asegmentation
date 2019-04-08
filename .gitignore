@@ -25,6 +25,15 @@ wheels/
 *.egg
 MANIFEST
 
+# tar files
+*.tar.gz
+
+# npy files
+*.npy
+
+# Flow images
+flow_extraction/flows/
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

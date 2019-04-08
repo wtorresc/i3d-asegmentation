@@ -1,0 +1,1 @@
+Here are gifs showing the provided .npy files. From the RGB data, we added 1 and then divided by 2 to rescale between 0 and 1. For the Flow data, we added a third channel of all 0, then added 0.5 to the entire array, so that results are also between 0 and 1.
