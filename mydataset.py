@@ -25,20 +25,21 @@ def video_to_tensor(pic):
     """
     return torch.from_numpy(pic.transpose([3,0,1,2]))
 
-
 def load_rgb_frames(image_dir, vid, start, num):
   frames = []
 
   vid_dir = os.path.join(image_dir, 'ims', vid)
 
-
   vid_files = [d.name for d in os.scandir(vid_dir) if d.is_file()]
   vid_files.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
-  # lsorted = sorted(vid_files,key=lambda x: int(os.path.splitext(x)[0]))
-
 
   for i in range(start, start+num):
-    img = cv2.imread(os.path.join(vid_dir, vid_files[i] ))[:, :, [2, 1, 0]]# (BGR -> RGB)
+    img = cv2.imread(os.path.join(vid_dir, vid_files[i] ))
+
+    try:
+        img = img[:, :, [2, 1, 0]]# (BGR -> RGB)
+    except:
+        pdb.set_trace()
     w,h,c = img.shape
     if w < 226 or h < 226:
         d = 226.-min(w,h)
@@ -51,10 +52,19 @@ def load_rgb_frames(image_dir, vid, start, num):
 def load_flow_frames(image_dir, vid, start, num):
   frames = []
   for i in range(start, start+num):
-    imgx = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'x.jpg'), cv2.IMREAD_GRAYSCALE)
-    imgy = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'y.jpg'), cv2.IMREAD_GRAYSCALE)
-    
-    w,h = imgx.shape
+
+    # Duplicate 1st flow frame to ensure no flow frames = no rgb frames
+    if i == 0:
+        ind = i+1
+    else:
+        ind = i
+
+    imgx = cv2.imread(os.path.join(image_dir,'flows', vid, vid+'-'+str(ind)+'x.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
+    imgy = cv2.imread(os.path.join(image_dir,'flows', vid, vid+'-'+str(ind)+'y.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
+    try:
+        w,h = imgx.shape
+    except:
+        pdb.set_trace()
     if w < 224 or h < 224:
         d = 224.-min(w,h)
         sc = 1+d/min(w,h)
@@ -71,8 +81,10 @@ def make_dataset(split_file, split, root, mode, num_classes=10):
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
-
-    train_dir = os.path.join(root, 'ims')
+    if mode == 'rgb':
+        train_dir = os.path.join(root, 'ims')
+    else:
+        train_dir = os.path.join(root,'flows')
     videos_dir = [d.name for d in os.scandir(train_dir) if d.is_dir()]
     video_dir_idx = [int(d[d.rfind('p') + 1 : d.rfind('.')].replace('_','')) for d in videos_dir] 
     video_dir_idx = np.array(video_dir_idx).argsort()
@@ -98,32 +110,38 @@ def make_dataset(split_file, split, root, mode, num_classes=10):
     video_frame_idx = 0
 
     for video_i in videos_dir:
-        # if data[vid]['subset'] != split:
-        #     continue
         
         video_i_path = os.path.join(train_dir, video_i)
 
         num_frames = len([1 for file in os.scandir(video_i_path) if file.is_file()])
 
+
+
+        # Optical flow generates x and y files for each image input file
         if mode == 'flow':
             num_frames = num_frames//2
+
+        # We are extracting per-frame features, so don't care if small total # frames
             
-        if num_frames < 66:
-            video_frame_idx += num_frames
-            continue
+        #if num_frames < 66:
+        #    video_frame_idx += num_frames
+        #    continue
 
         label = np.zeros((num_classes,num_frames), np.float32)
 
-        
         for fr_idx in range(0,num_frames,1):
-            fr_class = data['annotations'][video_frame_idx]['attributes']['activity']
+
+            try:
+                fr_class = data['annotations'][video_frame_idx]['attributes']['activity']
+            except:
+                pdb.set_trace()
+
             label[class_to_id.get(fr_class,0), fr_idx] = 1 # binary classification
             video_frame_idx += 1
 
         dataset.append((video_i, label, num_frames))
 
     return dataset
-
 
 class myDataset(data_utl.Dataset):
 
@@ -145,13 +163,22 @@ class myDataset(data_utl.Dataset):
             tuple: (image, target) where target is class_index of the target class.
         """
         vid, label, nf = self.data[index]
-        start_f = random.randint(1,nf-65)
+        #start_f = random.randint(1,nf-65)
+
+        # We want to generate features for all frames of a video
+        # - so need to process all frames
+        start_f = 0
 
         if self.mode == 'rgb':
-            imgs = load_rgb_frames(self.root, vid, start_f, 64)
+            #imgs = load_rgb_frames(self.root, vid, start_f, 64)
+            imgs = load_rgb_frames(self.root, vid, start_f, nf)
         else:
-            imgs = load_flow_frames(self.root, vid, start_f, 64)
-        label = label[:, start_f:start_f+64]
+            #imgs = load_flow_frames(self.root, vid, start_f, 64)
+
+            # We duplicate first flow frame!
+
+            imgs = load_flow_frames(self.root, vid, start_f, nf + 1)
+        label = label[:, start_f:start_f+nf]#64]
 
         imgs = self.transforms(imgs)
 
@@ -159,8 +186,6 @@ class myDataset(data_utl.Dataset):
 
     def __len__(self):
         return len(self.data)
-
-
 
 # if __name__ == "__main__":
 #     # execute only if run as a script

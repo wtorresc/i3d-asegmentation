@@ -9,6 +9,8 @@ import os
 import sys
 from collections import OrderedDict
 
+import pdb
+
 
 class MaxPool3dSamePadding(nn.MaxPool3d):
     
@@ -85,7 +87,6 @@ class Unit3D(nn.Module):
         else:
             return max(self._kernel_shape[dim] - (s % self._stride[dim]), 0)
 
-            
     def forward(self, x):
         # compute 'same' padding
         (batch, channel, t, h, w) = x.size()
@@ -118,8 +119,6 @@ class Unit3D(nn.Module):
         if self._activation_fn is not None:
             x = self._activation_fn(x)
         return x
-
-
 
 class InceptionModule(nn.Module):
     def __init__(self, in_channels, out_channels, name):
@@ -187,7 +186,8 @@ class InceptionI3d(nn.Module):
     )
 
     def __init__(self, num_classes=400, spatial_squeeze=True,
-                 final_endpoint='Logits', name='inception_i3d', in_channels=3, dropout_keep_prob=0.5):
+                 final_endpoint='Logits', name='inception_i3d', 
+                 in_channels=3, dropout_keep_prob=0.5,temporal_window=5):
         """Initializes I3D model instance.
         Args:
           num_classes: The number of outputs in the logit layer (default 400, which
@@ -209,6 +209,7 @@ class InceptionI3d(nn.Module):
             raise ValueError('Unknown final endpoint %s' % final_endpoint)
 
         super(InceptionI3d, self).__init__()
+
         self._num_classes = num_classes
         self._spatial_squeeze = spatial_squeeze
         self._final_endpoint = final_endpoint
@@ -290,8 +291,8 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         end_point = 'Logits'
-        self.avg_pool = nn.AvgPool3d(kernel_size=[2, 7, 7],
-                                     stride=(1, 1, 1))
+        #self.avg_pool = nn.AvgPool3d(kernel_size=[2, 7, 7], stride=(1, 1, 1))
+        self.avg_pool = nn.AvgPool3d(kernel_size=[1, 7, 7], stride=(1, 1, 1))
         self.dropout = nn.Dropout(dropout_keep_prob)
         self.logits = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes,
                              kernel_shape=[1, 1, 1],
@@ -300,9 +301,7 @@ class InceptionI3d(nn.Module):
                              use_batch_norm=False,
                              use_bias=True,
                              name='logits')
-
         self.build()
-
 
     def replace_logits(self, num_classes):
         self._num_classes = num_classes
@@ -313,8 +312,6 @@ class InceptionI3d(nn.Module):
                              use_batch_norm=False,
                              use_bias=True,
                              name='logits')
-        
-    
     def build(self):
         for k in self.end_points.keys():
             self.add_module(k, self.end_points[k])
@@ -330,9 +327,10 @@ class InceptionI3d(nn.Module):
         # logits is batch X time X classes, which is what we want to work with
         return logits
         
-
     def extract_features(self, x):
+
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
                 x = self._modules[end_point](x)
+
         return self.avg_pool(x)

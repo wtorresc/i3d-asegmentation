@@ -36,6 +36,7 @@ def save_flows(flows,image,flow_saving_dir,save_dir,num,bound):
     #rescale to 0~255 with the bound setting
     flow_x=ToImg(flows[...,0],bound)
     flow_y=ToImg(flows[...,1],bound)
+
     if not os.path.exists(os.path.join(flow_saving_dir,save_dir)):
         os.makedirs(os.path.join(flow_saving_dir,save_dir))
 
@@ -46,8 +47,21 @@ def save_flows(flows,image,flow_saving_dir,save_dir,num,bound):
     #save the flows
     save_x=os.path.join(flow_saving_dir, save_dir, save_dir+'-{}x.jpg'.format(num))
     save_y=os.path.join(flow_saving_dir, save_dir, save_dir+'-{}y.jpg'.format(num))
+
     flow_x_img=Image.fromarray(flow_x)
     flow_y_img=Image.fromarray(flow_y)
+
+    '''
+    f=os.path.join(flow_saving_dir, save_dir, '{}.npy'.format(num))
+    
+    
+    
+    try:
+        np.save(f,np.stack((flow_x,flow_y))) 
+    except:
+        pdb.set_trace()  
+    ''' 
+    #scipy.misc.imsave(save)
     scipy.misc.imsave(save_x,flow_x_img)
     scipy.misc.imsave(save_y,flow_y_img)
 
@@ -119,7 +133,7 @@ def dense_flow(augs):
         frame_0=prev_gray
         frame_1=gray
         ##default choose the tvl1 algorithm
-        dtvl1=cv2.createOptFlow_DualTVL1()
+        dtvl1 = cv2.createOptFlow_DualTVL1()
         flowDTVL1=dtvl1.calc(frame_0,frame_1,None)
 
         save_flows(flowDTVL1,image,flow_saving_dir,save_dir,frame_num,bound) #this is to save flows and img.
@@ -156,7 +170,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="densely extract the video frames and optical flows")
     parser.add_argument('--data_root',default='../../data/BrickLaying/ims',type=str)
     parser.add_argument('--flow_saving_dir',default='./flows',type=str)
-    parser.add_argument('--num_workers',default=4,type=int,help='num of workers to act multi-process')
+    parser.add_argument('--num_workers',default=16,type=int,help='num of workers to act multi-process')
     parser.add_argument('--step',default=1,type=int,help='gap frames')
     parser.add_argument('--bound',default=20,type=int,help='set the maximum of optical flow')
     parser.add_argument('--s_',default=0,type=int,help='start id')
