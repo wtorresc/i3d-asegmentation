@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data as data_utl
 from torch.utils.data.dataloader import default_collate
+from pairing import *
 
 import numpy as np
 import json
@@ -28,7 +29,7 @@ def video_to_tensor(pic):
 def load_rgb_frames(image_dir, vid, start, num):
   frames = []
 
-  vid_dir = os.path.join(image_dir, 'ims', vid)
+  vid_dir = os.path.join(image_dir, 'new_ims', vid)
 
   vid_files = [d.name for d in os.scandir(vid_dir) if d.is_file()]
   vid_files.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
@@ -59,8 +60,8 @@ def load_flow_frames(image_dir, vid, start, num):
     else:
         ind = i
 
-    imgx = cv2.imread(os.path.join(image_dir,'flows', vid, vid+'-'+str(ind)+'x.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
-    imgy = cv2.imread(os.path.join(image_dir,'flows', vid, vid+'-'+str(ind)+'y.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
+    imgx = cv2.imread(os.path.join(image_dir,'new_flow', vid, vid+'-'+str(ind)+'x.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
+    imgy = cv2.imread(os.path.join(image_dir,'new_flow', vid, vid+'-'+str(ind)+'y.jpg'), cv2.IMREAD_GRAYSCALE) #.zfill(6)
     try:
         w,h = imgx.shape
     except:
@@ -77,18 +78,22 @@ def load_flow_frames(image_dir, vid, start, num):
     frames.append(img)
   return np.asarray(frames, dtype=np.float32)
 
-def make_dataset(split_file, split, root, mode, num_classes=10):
+def make_dataset(split_file, split, root, mode, num_classes=13):
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
     if mode == 'rgb':
-        train_dir = os.path.join(root, 'ims')
+        train_dir = os.path.join(root, 'new_ims')
     else:
-        train_dir = os.path.join(root,'flows')
+        train_dir = os.path.join(root,'new_flow')
     videos_dir = [d.name for d in os.scandir(train_dir) if d.is_dir()]
     video_dir_idx = [int(d[d.rfind('p') + 1 : d.rfind('.')].replace('_','')) for d in videos_dir] 
     video_dir_idx = np.array(video_dir_idx).argsort()
     videos_dir = list(np.array(videos_dir)[video_dir_idx])
+
+
+    # Just to explore
+
    
     class_list = []
     print('Number of annotations: {}'.format(len(data['annotations'])))
@@ -96,10 +101,9 @@ def make_dataset(split_file, split, root, mode, num_classes=10):
     for class_i in range(len(data['annotations'])):
         activity = data['annotations'][class_i]['attributes']['activity']
 
-        # if activity == '__undefined__':
-        #     print('id: {}'.format(data['annotations'][class_i]['id']))
-        #     print('image_id: {}'.format(data['annotations'][class_i]['image_id']))
-            # pdb.set_trace()
+        if activity in ['__undefined__','']:
+            print('id: {}'.format(data['annotations'][class_i]['id']))
+            print('image_id: {}'.format(get_video_and_frame(data['annotations'][class_i]['image_id'])))
 
         if activity not in class_list:
             class_list.append(activity)
@@ -114,8 +118,6 @@ def make_dataset(split_file, split, root, mode, num_classes=10):
         video_i_path = os.path.join(train_dir, video_i)
 
         num_frames = len([1 for file in os.scandir(video_i_path) if file.is_file()])
-
-
 
         # Optical flow generates x and y files for each image input file
         if mode == 'flow':
@@ -136,7 +138,11 @@ def make_dataset(split_file, split, root, mode, num_classes=10):
             except:
                 pdb.set_trace()
 
-            label[class_to_id.get(fr_class,0), fr_idx] = 1 # binary classification
+            try:
+                label[class_to_id.get(fr_class,0), fr_idx] = 1 # binary classification
+            except:
+                print(video_i)
+                pdb.set_trace()
             video_frame_idx += 1
 
         dataset.append((video_i, label, num_frames))
@@ -153,6 +159,9 @@ class myDataset(data_utl.Dataset):
         self.mode = mode
         self.root = root
         self.save_dir = save_dir
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
     def __getitem__(self, index):
         """
@@ -174,10 +183,10 @@ class myDataset(data_utl.Dataset):
             imgs = load_rgb_frames(self.root, vid, start_f, nf)
         else:
             #imgs = load_flow_frames(self.root, vid, start_f, 64)
-
             # We duplicate first flow frame!
 
-            imgs = load_flow_frames(self.root, vid, start_f, nf + 1)
+            imgs = load_flow_frames(self.root, vid, start_f, nf+1) #+ 1)
+
         label = label[:, start_f:start_f+nf]#64]
 
         imgs = self.transforms(imgs)

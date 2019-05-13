@@ -187,7 +187,7 @@ class InceptionI3d(nn.Module):
 
     def __init__(self, num_classes=400, spatial_squeeze=True,
                  final_endpoint='Logits', name='inception_i3d', 
-                 in_channels=3, dropout_keep_prob=0.5,temporal_window=5):
+                 in_channels=3, dropout_keep_prob=0.5, temp_window =5):
         """Initializes I3D model instance.
         Args:
           num_classes: The number of outputs in the logit layer (default 400, which
@@ -207,6 +207,8 @@ class InceptionI3d(nn.Module):
 
         if final_endpoint not in self.VALID_ENDPOINTS:
             raise ValueError('Unknown final endpoint %s' % final_endpoint)
+
+        #pdb.set_trace()
 
         super(InceptionI3d, self).__init__()
 
@@ -291,8 +293,15 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         end_point = 'Logits'
+
+        # !! Note that we want 1 frame per output. To enforce this we 
+        # need to adapt kernel_size of this AvgPool layer to the temporal window
+        # we are interested in.
+
         #self.avg_pool = nn.AvgPool3d(kernel_size=[2, 7, 7], stride=(1, 1, 1))
-        self.avg_pool = nn.AvgPool3d(kernel_size=[1, 7, 7], stride=(1, 1, 1))
+        #self.avg_pool = nn.AvgPool3d(kernel_size=[1, 7, 7], stride=(1, 1, 1))
+        self.avg_pool = nn.AvgPool3d(kernel_size=[(temp_window // 8 + 1), 7 , 7] , stride=(1, 1, 1))
+
         self.dropout = nn.Dropout(dropout_keep_prob)
         self.logits = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes,
                              kernel_shape=[1, 1, 1],
@@ -332,5 +341,8 @@ class InceptionI3d(nn.Module):
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
                 x = self._modules[end_point](x)
+
+        if self.avg_pool(x).shape[2] != 1:
+            pdb.set_trace()
 
         return self.avg_pool(x)

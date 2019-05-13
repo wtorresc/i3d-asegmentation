@@ -53,9 +53,6 @@ def save_flows(flows,image,flow_saving_dir,save_dir,num,bound):
 
     '''
     f=os.path.join(flow_saving_dir, save_dir, '{}.npy'.format(num))
-    
-    
-    
     try:
         np.save(f,np.stack((flow_x,flow_y))) 
     except:
@@ -164,13 +161,11 @@ def get_video_list():
 
     return video_list,len(video_list)
 
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="densely extract the video frames and optical flows")
-    parser.add_argument('--data_root',default='../../data/BrickLaying/ims',type=str)
-    parser.add_argument('--flow_saving_dir',default='./flows',type=str)
-    parser.add_argument('--num_workers',default=16,type=int,help='num of workers to act multi-process')
+    parser.add_argument('--data_root',default='../../data/BL_and_PL/new_ims',type=str)
+    parser.add_argument('--flow_saving_dir',default='../../data/BL_and_PL/new_flow',type=str)
+    parser.add_argument('--num_workers',default=200,type=int,help='num of workers to act multi-process')
     parser.add_argument('--step',default=1,type=int,help='gap frames')
     parser.add_argument('--bound',default=20,type=int,help='set the maximum of optical flow')
     parser.add_argument('--s_',default=0,type=int,help='start id')

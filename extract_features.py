@@ -7,7 +7,7 @@ import pdb
 parser = argparse.ArgumentParser()
 parser.add_argument('-mode', default='rgb', type=str, help='rgb or flow')
 parser.add_argument('-load_model', default='./models/rgb_imagenet.pt', type=str)
-parser.add_argument('-root', default='../data/BrickLaying', type=str)
+parser.add_argument('-root', default='../data/BL_and_PL', type=str)
 parser.add_argument('-gpu', default='0', type=str)
 parser.add_argument('-save_dir', default='./', type=str)
 parser.add_argument('-temporal_window',default=5,type=int)
@@ -35,31 +35,32 @@ from pytorch_i3d import InceptionI3d
 # from charades_dataset_full import Charades as Dataset
 from mydataset import myDataset as Dataset
 
-def run(max_steps=64e3, mode='rgb', root='../data/BrickLaying', split='../data/BrickLaying/annotations.json', batch_size=1, load_model='', save_dir='args.save_dir'):
+
+def run(max_steps=64e3, mode='rgb', root='../data/BL_and_PL', split='../data/BL_and_PL/new_annotations.json', batch_size=1, load_model='', save_dir='args.save_dir'):
     # setup dataset
+    
+    #test_transforms = transforms.Compose([videotransforms.RandomCrop(224),
+    #                                      videotransforms.RandomHorizontalFlip(),
+    #])
+
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
     dataset = Dataset(split, 'training', root, mode, test_transforms, num=-1, save_dir=save_dir)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, 
-                                    shuffle=True, num_workers=0, pin_memory=True)
-
-    # val_dataset = Dataset(split, 'testing', root, mode, test_transforms, num=-1, save_dir=save_dir)
-    # val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)    
-
-    dataloaders = {'train': dataloader}#, 'val': val_dataloader}
-    datasets = {'train': dataset}#, 'val': val_dataset}
+                                            shuffle=True, num_workers=0, pin_memory=True)
+    dataloaders = {'train': dataloader}
+    datasets = {'train': dataset}
     
     # setup the model
     if mode == 'flow':
-        i3d = InceptionI3d(400, in_channels=2)
+        i3d = InceptionI3d(400, in_channels=2, temp_window = args.temporal_window)
         input_padder = nn.ReplicationPad3d(padding=(0,0,0,0,
                                     args.temporal_window//2,args.temporal_window//2))
+    #, final_endpoint= 'Mixed_5c'
     else:
-        i3d = InceptionI3d(400,in_channels=3) #, final_endpoint= 'Mixed_5c'
+        i3d = InceptionI3d(400,in_channels=3, temp_window = args.temporal_window) 
         input_padder = nn.ReplicationPad3d(padding=(0,0,0,0,
                                     args.temporal_window//2,args.temporal_window//2))
-    # i3d.replace_logits(157) Why is this???????
-    # replace logits with the 157 charades classes
 
     i3d.load_state_dict(torch.load(load_model))
     i3d.cuda()
@@ -76,10 +77,10 @@ def run(max_steps=64e3, mode='rgb', root='../data/BrickLaying', split='../data/B
             # get the inputs
             inputs, labels, name = data
 
-            print('extracting features for {}'.format(name[0]))
+            print('extracting {} features for {} and tw {}'.format(mode, name[0],args.temporal_window))
 
-            if os.path.exists(os.path.join(save_dir, name[0]+'.npy')):
-                continue
+            #if os.path.exists(os.path.join(save_dir, name[0]+'.npy')):
+            #    continue
 
             b,c,t,h,w = inputs.shape
             if t > 1600:
@@ -100,15 +101,17 @@ def run(max_steps=64e3, mode='rgb', root='../data/BrickLaying', split='../data/B
                 per_frame_features = []#torch.zeros((1,1024,1,1,1))
 
                 # We want per-frame features. Authors of MS-TCN slid temporal window over 
-                # each frame and input that to the network.
+                # each frame and input that to the network.           
              
                 for w in range(no_frames):
 
                     windowed_inputs = inputs[:,:, w:(w+(args.temporal_window)), :,:].cuda()
                     features = i3d.extract_features(windowed_inputs)
+
                     per_frame_features.append(features.cpu().data)
                     if w % 10 == 0:
                         print('         {}'.format(w) )
+
                 np.save(os.path.join(save_dir, name[0]), 
                         np.concatenate(per_frame_features,axis=2)[0,:,:,0,0])
 
